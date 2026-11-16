@@ -22,8 +22,11 @@ get a fix without a disruptive major or minor upgrade.
    `rhlw` builds can be found.
 3. **Remediation PRs:** Renovate (see [Renovate configuration](#renovate-configuration))
    checks the Lightwell remediated repository and opens pull requests that move
-   each vulnerable dependency to its Lightwell-remediated version.
-4. **Verification:** The build generates a CycloneDX SBOM. You can upload it to
+   each direct dependency to its Lightwell-remediated version.
+4. **Transitive remediations:** Spring Framework is not declared in `pom.xml`.
+   A second workflow pins the Lightwell rebuilds of those transitive
+   dependencies in a BOM. See [Transitive dependencies](#transitive-dependencies).
+5. **Verification:** The build generates a CycloneDX SBOM. You can upload it to
    Red Hat Trusted Profile Analyzer (TPA) to compare the vulnerability posture
    before and after remediation.
 
@@ -62,9 +65,8 @@ two repositories. Maven checks them in this order:
 
 These are the *public demo* repositories, so no credentials are required.
 
-Because the `Containerfile` copies `.mvn` into the build stage
-(`COPY .mvn ./.mvn`), container builds resolve dependencies the same way local
-builds do.
+Because the `Containerfile` copies `.mvn` and `lightwell-pins-repo` into the
+build stage, container builds resolve dependencies the same way local builds do.
 
 ## Renovate configuration
 
@@ -85,6 +87,12 @@ Renovate is what actually proposes the remediations. Its configuration is in
       "registryUrls": [
         "https://packages.redhat.com/lightwell/public-lightwell-demo/java/remediated/"
       ]
+    },
+    {
+      "description": "The transitive pin BOM is updated by the transitive-pins workflow",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["com.lightwell:rhlw-pins"],
+      "enabled": false
     }
   ]
 }
@@ -113,6 +121,25 @@ The workflow sets `RENOVATE_REQUIRE_CONFIG: required`, so `renovate.json` must
 be present, and it disables onboarding. It uses the `RENOVATE_TOKEN` secret if
 set and otherwise falls back to `GITHUB_TOKEN`. Use a PAT or GitHub App token
 in `RENOVATE_TOKEN` if you want Renovate's PRs to trigger other workflows.
+
+## Transitive dependencies
+
+Renovate rewrites `<version>` tags in `pom.xml`. Spring Framework has no
+version tag there. `spring-boot-starter-web` and `spring-boot-starter-security`
+bring in `spring-core`, `spring-webmvc`, and `spring-expression` at 5.3.18.
+The public remediated repository publishes `5.3.18.rhlw-00010` for each.
+
+`pom.xml` imports `com.lightwell:rhlw-pins` (`lightwell-pins.xml`) from
+`lightwell-pins-repo/`. The committed BOM is `0.0.1` with an empty
+`dependencyManagement`, so those libraries stay on the Boot versions until the
+update workflow runs. Direct dependencies keep the version in `pom.xml`.
+
+[`.github/workflows/transitive-pins.yml`](.github/workflows/transitive-pins.yml)
+runs daily at 07:00 UTC and from **Actions → Transitive pins → Run workflow**.
+It checks out `lightwell-experience/renovate-config` at `main` and runs
+`scripts/pin-transitives.mjs --write`. That keeps pins already resolved at an
+`rhlw` version, updates the import in `pom.xml`, and publishes the BOM into
+`lightwell-pins-repo/`. The workflow opens a pull request when those files change.
 
 ## Building and running
 
@@ -156,13 +183,16 @@ The result is written to `sbom.json`, which you can upload to TPA.
 
 ## Repository layout
 
-| Path                              | Purpose                                                    |
-|-----------------------------------|------------------------------------------------------------|
-| `pom.xml`                         | Maven build with intentionally vulnerable dependencies     |
-| `.mvn/`                           | Project-local Maven config pointing to Lightwell repos     |
-| `renovate.json`                   | Renovate config using the Lightwell Java preset            |
-| `.github/workflows/renovate.yml`  | Scheduled and manual Renovate runs                         |
-| `Containerfile`                   | Multi-stage UBI9 / OpenJDK 17 image build                  |
-| `generate-sbom.sh`                | Builds the image and produces a merged SBOM                |
-| `merge-sboms.py`                  | Merges the Maven and syft CycloneDX SBOMs                  |
-| `src/`                            | Spring Boot application source                             |
+| Path                                    | Purpose                                                |
+|-----------------------------------------|--------------------------------------------------------|
+| `pom.xml`                               | Maven build with intentionally vulnerable dependencies |
+| `lightwell-pins.xml`                    | BOM of Lightwell rebuilds for transitive dependencies  |
+| `lightwell-pins-repo/`                  | File repository Maven uses to import that BOM          |
+| `.mvn/`                                 | Project-local Maven config pointing to Lightwell repos |
+| `renovate.json`                         | Renovate config using the Lightwell Java preset        |
+| `.github/workflows/renovate.yml`        | Scheduled and manual Renovate runs                     |
+| `.github/workflows/transitive-pins.yml` | Scheduled and manual transitive pin updates            |
+| `Containerfile`                         | Multi-stage UBI9 / OpenJDK 17 image build              |
+| `generate-sbom.sh`                      | Builds the image and produces a merged SBOM            |
+| `merge-sboms.py`                        | Merges the Maven and syft CycloneDX SBOMs              |
+| `src/`                                  | Spring Boot application source                         |
