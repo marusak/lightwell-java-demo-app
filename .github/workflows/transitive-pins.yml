@@ -39,7 +39,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: .renovate-config/package-lock.json
 
@@ -54,13 +54,27 @@ jobs:
           set -o pipefail
           log="${RUNNER_TEMP}/pin-transitives.log"
           echo "Running pin-transitives"
+          # Renovate lowercases RENOVATE_LOG_FILE. A relative name stays in the temp directory.
+          renovate="${GITHUB_WORKSPACE}/.renovate-config/node_modules/.bin/renovate"
           set +e
-          node .renovate-config/scripts/pin-transitives.mjs --write 2>&1 | tee "$log"
+          node .renovate-config/scripts/pin-transitives.mjs --write \
+            --renovate "env RENOVATE_LOG_FILE=renovate.ndjson ${renovate} --platform=local --onboarding=false --dry-run=lookup" \
+            2>&1 | tee "$log"
           status=${PIPESTATUS[0]}
           set -e
 
           tmp=$(sed -n 's/^Temporary files (not deleted): //p' "$log" | tail -1)
           echo "pin-transitives temp: ${tmp:-not found}"
+          renovate_log=""
+          if [ -n "${tmp}" ] && [ -f "${tmp}/renovate.ndjson" ]; then
+            renovate_log="${tmp}/renovate.ndjson"
+          else
+            lower=$(printf '%s' "${tmp}" | tr '[:upper:]' '[:lower:]')
+            if [ -n "${lower}" ] && [ -f "${lower}/renovate.ndjson" ]; then
+              renovate_log="${lower}/renovate.ndjson"
+              echo "Renovate log was written to the lowercased path: ${renovate_log}"
+            fi
+          fi
 
           echo "::group::Resolved dependencies"
           if [ -n "${tmp}" ] && [ -f "${tmp}/dependency-tree.json" ]; then
@@ -94,8 +108,8 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Renovate log"
-          if [ -n "${tmp}" ] && [ -f "${tmp}/renovate.ndjson" ]; then
-            python3 - "${tmp}/renovate.ndjson" << 'PY'
+          if [ -n "${renovate_log}" ]; then
+            python3 - "${renovate_log}" << 'PY'
           import json, sys
           for line in open(sys.argv[1], encoding="utf-8"):
               line = line.strip()
