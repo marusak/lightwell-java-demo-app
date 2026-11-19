@@ -51,11 +51,90 @@ jobs:
         env:
           RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node .renovate-config/scripts/pin-transitives.mjs --write
+          set -o pipefail
+          log="${RUNNER_TEMP}/pin-transitives.log"
+          echo "Running pin-transitives"
+          set +e
+          node .renovate-config/scripts/pin-transitives.mjs --write 2>&1 | tee "$log"
+          status=${PIPESTATUS[0]}
+          set -e
+
+          tmp=$(sed -n 's/^Temporary files (not deleted): //p' "$log" | tail -1)
+          echo "pin-transitives temp: ${tmp:-not found}"
+
+          echo "::group::Resolved dependencies"
+          if [ -n "${tmp}" ] && [ -f "${tmp}/dependency-tree.json" ]; then
+            python3 - "${tmp}/dependency-tree.json" << 'PY'
+          import json, sys
+          raw = open(sys.argv[1], encoding="utf-8").read()
+          try:
+              data = json.loads(raw)
+          except json.JSONDecodeError:
+              print("dependency-tree.json is not JSON. First lines:")
+              print("\n".join(raw.splitlines()[:40]))
+              sys.exit(0)
+          seen = set()
+          def walk(node, depth):
+              if depth and node.get("groupId") and node.get("artifactId") and node.get("scope") != "test":
+                  name = f"{node['groupId']}:{node['artifactId']}"
+                  if name not in seen:
+                      seen.add(name)
+                      kind = "direct" if depth == 1 else "transitive"
+                      print(f"{name}:{node.get('version', '')}  {kind}")
+              for child in node.get("children") or []:
+                  walk(child, depth + 1)
+          for node in data if isinstance(data, list) else [data]:
+              walk(node, 0)
+          if not seen:
+              print("none")
+          PY
+          else
+            echo "Maven dependency tree was not found."
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Renovate log"
+          if [ -n "${tmp}" ] && [ -f "${tmp}/renovate.ndjson" ]; then
+            python3 - "${tmp}/renovate.ndjson" << 'PY'
+          import json, sys
+          for line in open(sys.argv[1], encoding="utf-8"):
+              line = line.strip()
+              if not line:
+                  continue
+              if "packageFiles with updates" in line:
+                  print("packageFiles with updates: " + line[:2000])
+                  continue
+              try:
+                  obj = json.loads(line)
+              except json.JSONDecodeError:
+                  print(line[:500])
+                  continue
+              msg = obj.get("msg") or obj.get("message")
+              if msg:
+                  print(f"{obj.get('level', '')}: {msg}"[:500])
+          PY
+          else
+            echo "Renovate log was not found."
+          fi
+          echo "::endgroup::"
+
+          if [ "$status" -ne 0 ]; then
+            echo "pin-transitives exited ${status}"
+            exit "$status"
+          fi
+
           version=$(sed -n '/<dependencyManagement>/q;s/.*<version>\([^<]*\)<\/version>.*/\1/p' lightwell-pins.xml)
           version=${version//[[:space:]]/}
           test -n "$version"
+          echo "Pin BOM version: ${version}"
           sed -i -E "/<artifactId>rhlw-pins<\/artifactId>/,/<\/dependency>/ s|<version>[^<]*</version>|<version>${version}</version>|" pom.xml
+
+          echo "::group::lightwell-pins.xml"
+          cat lightwell-pins.xml
+          echo "::endgroup::"
+          echo "::group::Changes"
+          git diff -- lightwell-pins.xml pom.xml
+          echo "::endgroup::"
 
       - name: Open pull request
         uses: peter-evans/create-pull-request@v7
