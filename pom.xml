@@ -23,6 +23,18 @@
         <java.version>17</java.version>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.lightwell</groupId>
+                <artifactId>rhlw-pins</artifactId>
+                <version>0.0.1</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!-- Spring Boot starters (Boot 2.6.6 -> Spring Framework 5.3.18, Spring Security 5.6.2) -->
         <dependency>
@@ -112,6 +124,21 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <repositories>
+        <repository>
+            <id>lightwell-pins</id>
+            <name>Lightwell transitive pin BOM</name>
+            <url>file://${maven.multiModuleProjectDirectory}/lightwell-pins-repo</url>
+            <releases>
+                <enabled>true</enabled>
+                <checksumPolicy>ignore</checksumPolicy>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <build>
         <plugins>
