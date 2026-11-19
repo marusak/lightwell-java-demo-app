@@ -51,12 +51,9 @@ jobs:
         env:
           RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Renovate lowercases RENOVATE_LOG_FILE, so pass a relative name.
-          renovate="${GITHUB_WORKSPACE}/.renovate-config/node_modules/.bin/renovate"
-          node .renovate-config/scripts/pin-transitives.mjs --write \
-            --renovate "env RENOVATE_LOG_FILE=renovate.ndjson ${renovate} --platform=local --onboarding=false --dry-run=lookup"
+          sed -i 's/RENOVATE_LOG_FILE: logFile,/RENOVATE_LOG_FILE: "renovate.ndjson",/' .renovate-config/scripts/pin-transitives.mjs
+          node .renovate-config/scripts/pin-transitives.mjs --write lightwell-pins.xml
           version=$(sed -n '/<dependencyManagement>/q;s/.*<version>\([^<]*\)<\/version>.*/\1/p' lightwell-pins.xml)
-          version=${version//[[:space:]]/}
           test -n "$version"
           sed -i -E "/<artifactId>rhlw-pins<\/artifactId>/,/<\/dependency>/ s|<version>[^<]*</version>|<version>${version}</version>|" pom.xml
 
@@ -72,6 +69,8 @@ jobs:
             The import applies to transitive dependencies. Spring Framework (`spring-core`, `spring-webmvc`, `spring-expression`) is the set published in the public Lightwell demo repository.
             Direct dependencies keep the version declared in `pom.xml`.
           branch: lightwell/transitive-pins
+          branch-suffix: random
           add-paths: |
             lightwell-pins.xml
+            lightwell-pins-repo/
             pom.xml

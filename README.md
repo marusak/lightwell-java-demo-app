@@ -129,17 +129,19 @@ version tag there. `spring-boot-starter-web` and `spring-boot-starter-security`
 bring in `spring-core`, `spring-webmvc`, and `spring-expression` at 5.3.18.
 The public remediated repository publishes `5.3.18.rhlw-00010` for each.
 
-`pom.xml` imports `com.lightwell:rhlw-pins` (`lightwell-pins.xml`) from
-`lightwell-pins-repo/`. The committed BOM is `0.0.1` with an empty
-`dependencyManagement`, so those libraries stay on the Boot versions until the
-update workflow runs. Direct dependencies keep the version in `pom.xml`.
+`pom.xml` imports `com.lightwell:rhlw-pins` from `lightwell-pins-repo/`. The
+committed BOM is `0.0.1` with an empty `dependencyManagement`, so those
+libraries stay on the Boot versions until the update workflow runs. Direct
+dependencies keep the version in `pom.xml`.
 
 [`.github/workflows/transitive-pins.yml`](.github/workflows/transitive-pins.yml)
 runs daily at 07:00 UTC and from **Actions → Transitive pins → Run workflow**.
 It checks out `lightwell-experience/renovate-config` at `main` and runs
-`scripts/pin-transitives.mjs --write`. That script rewrites `lightwell-pins.xml`
-and does not edit `pom.xml`, so the workflow then sets the `rhlw-pins` import
-to the BOM version. The workflow opens a pull request when those files change.
+`scripts/pin-transitives.mjs --write lightwell-pins.xml`. The script updates
+that file and, when `lightwell-pins-repo/` is present, writes the same POM
+there under the BOM version. It does not edit `pom.xml`, so the workflow then
+sets the `rhlw-pins` import to the version in `lightwell-pins.xml`. The
+workflow opens a pull request when those files change.
 
 ## Building and running
 
@@ -187,7 +189,7 @@ The result is written to `sbom.json`, which you can upload to TPA.
 |-----------------------------------------|--------------------------------------------------------|
 | `pom.xml`                               | Maven build with intentionally vulnerable dependencies |
 | `lightwell-pins.xml`                    | BOM of Lightwell rebuilds for transitive dependencies  |
-| `lightwell-pins-repo/`                  | File repository Maven uses to import that BOM          |
+| `lightwell-pins-repo/`                  | File repository that serves that BOM to Maven          |
 | `.mvn/`                                 | Project-local Maven config pointing to Lightwell repos |
 | `renovate.json`                         | Renovate config using the Lightwell Java preset        |
 | `.github/workflows/renovate.yml`        | Scheduled and manual Renovate runs                     |

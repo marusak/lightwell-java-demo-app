@@ -129,9 +129,10 @@
         <repository>
             <id>lightwell-pins</id>
             <name>Lightwell transitive pin BOM</name>
-            <url>file://${project.basedir}/lightwell-pins-repo</url>
+            <url>file://${maven.multiModuleProjectDirectory}/lightwell-pins-repo</url>
             <releases>
                 <enabled>true</enabled>
+                <checksumPolicy>ignore</checksumPolicy>
             </releases>
             <snapshots>
                 <enabled>false</enabled>
