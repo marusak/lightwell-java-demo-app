@@ -48,7 +48,7 @@
             <dependency>
                 <groupId>com.lightwell</groupId>
                 <artifactId>rhlw-pins</artifactId>
-                <version>0.0.1</version>
+                <version>0.0.2</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
